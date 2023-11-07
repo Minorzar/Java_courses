@@ -1,25 +1,15 @@
 package ui ;
 
 import javafx.application.Application ;
-import javafx.scene.Group ;
-import javafx.scene.Scene ;
-import javafx.scene.control.ComboBox ;
-import javafx.scene.control.Separator ;
-import javafx.scene.control.ToolBar ;
-import javafx.scene.layout.BorderPane ;
-import javafx.scene.layout.HBox ;
+import javafx.scene.* ;
+import javafx.scene.control.* ;
+import javafx.scene.layout.* ;
 import javafx.stage.Stage ;
-import javafx.scene.Node ;
-import javafx.scene.control.Label ;
-import javafx.scene.control.TextField ;
-import javafx.scene.control.Button ;
-
-import java.net.MalformedURLException ;
 
 
 public class App extends Application {
     @Override
-    public void start(Stage primStage) throws MalformedURLException {
+    public void start(Stage primStage) {
         try{
             BorderPane root = new BorderPane() ;
             root.setTop(createToolbar()) ;
@@ -48,8 +38,7 @@ public class App extends Application {
             System.out.println("Selected item: " + selected);
         });
 
-        ToolBar tb = new ToolBar(button, label, new Separator(), cb);
-        return tb;
+        return new ToolBar(button, label, new Separator(), cb);
     }
 
     private Node createStatusbar(){
@@ -59,8 +48,7 @@ public class App extends Application {
     }
 
     private Node createMaineContent(){
-        Group g = new Group() ;
 
-        return g ;
+        return new Group();
     }
 }
