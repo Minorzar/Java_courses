@@ -46,7 +46,22 @@ public class AudioSignal {
     }
 
     public boolean playTo(SourceDataLine audioOutput) {
-        return true ;
+        if (audioOutput == null || !audioOutput.isOpen()) {
+            return false;
+        }
+
+        int numBytes = sampleBuffer.length * 2;
+        byte[] byteBuffer = new byte[numBytes];
+
+        for (int i = 0; i < sampleBuffer.length; i++) {
+            short sampleValue = (short) (sampleBuffer[i] * 32767.0);
+            byteBuffer[2 * i] = (byte) (sampleValue & 0xFF);
+            byteBuffer[2 * i + 1] = (byte) ((sampleValue >> 8) & 0xFF);
+        }
+
+        int numBytesWritten = audioOutput.write(byteBuffer, 0, numBytes);
+
+        return numBytesWritten != -1;
     }
 
     public double getdBlevel() {
