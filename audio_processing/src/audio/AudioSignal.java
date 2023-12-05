@@ -1,101 +1,241 @@
 package audio;
 
-import javax.sound.sampled.* ;
-import java.util.Arrays ;
+import math.Complex;
+import math.FFT;
 
-import math.Complex ;
-
-import static java.lang.Math.*;
+import javax.sound.sampled.*;
 
 public class AudioSignal {
+
     private double[] sampleBuffer;
     private double dBlevel;
 
     public AudioSignal(int frameSize) {
         sampleBuffer = new double[frameSize];
-        dBlevel = 0.0;
+    }
+
+    public AudioSignal(AudioSignal other) {
+        this.sampleBuffer = other.sampleBuffer;
+        this.dBlevel = other.dBlevel;
     }
 
     public void setFrom(AudioSignal other) {
-        int newFrameSize = other.getFrameSize() ;
-        this.sampleBuffer = new double[newFrameSize] ;
-
-        for (int i = 0; i < newFrameSize ; i++) {
-            double sample = other.getSample(i);
-            setSample(i, sample);
-
-            this.dBlevel = other.getdBlevel() ;
-        }
+        this.dBlevel = other.dBlevel;
+        this.sampleBuffer = other.sampleBuffer;
     }
 
-    public boolean recordFrom(TargetDataLine audioInput) {
-        byte[] byteBuffer = new byte[sampleBuffer.length * 2];
+    public void recordFrom(TargetDataLine audioInput) {
+        byte[] byteBuffer = new byte[sampleBuffer.length*2];
+        if (audioInput.read(byteBuffer, 0, byteBuffer.length)==-1) return;
 
-        if (audioInput.read(byteBuffer, 0, byteBuffer.length) == -1) {
-            return false;
+        for (int i=0; i<sampleBuffer.length; i++)
+            sampleBuffer[i] = ((byteBuffer[2*i]<<8)+byteBuffer[2*i+1]) / 32768.0;
+
+        double sum = 0.0;
+        for (double sample : sampleBuffer) {
+            sum += sample * sample;
         }
+        double rms = Math.sqrt(sum / sampleBuffer.length);
 
-        for (int i = 0; i < sampleBuffer.length; i++) {
-            sampleBuffer[i] = ((byteBuffer[2 * i] << 8) + byteBuffer[2 * i + 1]) / 32768.0;
-        }
+        this.dBlevel = 20 * Math.log10(rms);
 
-        double energie = Arrays.stream(sampleBuffer).map(element -> abs(element * element)).sum() ;
-        dBlevel = 10*log10(energie/10e-12) ;
-
-        return  true ;
     }
 
-    public boolean playTo(SourceDataLine audioOutput) {
-        if (audioOutput == null || !audioOutput.isOpen()) {
-            return false;
+    public byte[] convertDoublesToBytes(double[] doubles, int SizeInBits) {
+        if (SizeInBits == 16) {
+            byte[] bytes = new byte[doubles.length * 2];
+            for (int i = 0; i < doubles.length; i++) {
+
+                short scaledValue = (short) (doubles[i] * Short.MAX_VALUE);
+
+                bytes[2 * i] = (byte) ((scaledValue >> 8) & 0xFF);
+                bytes[2 * i + 1] = (byte) (scaledValue & 0xFF);
+
+            }
+            return bytes;
         }
 
-        int numBytes = sampleBuffer.length * 2;
-        byte[] byteBuffer = new byte[numBytes];
+        if (SizeInBits == 8) {
+            byte[] bytes = new byte[doubles.length];
+            for (int i = 0; i < doubles.length; i++) {
 
-        for (int i = 0; i < sampleBuffer.length; i++) {
-            short sampleValue = (short) (sampleBuffer[i] * 32767.0);
-            byteBuffer[2 * i] = (byte) (sampleValue & 0xFF);
-            byteBuffer[2 * i + 1] = (byte) ((sampleValue >> 8) & 0xFF);
+                short scaledValue = (short) (doubles[i] * 127);
+
+                bytes[i] = (byte) scaledValue;
+
+            }
+            return bytes;
         }
 
-        int numBytesWritten = audioOutput.write(byteBuffer, 0, numBytes);
-
-        return numBytesWritten != -1;
+        throw new RuntimeException("Unhandle sample byte size");
     }
 
-    public double getdBlevel() {
-        return dBlevel;
+
+    public void playTo(SourceDataLine audioOutput) {
+
+        audioOutput.start();
+
+        audioOutput.write(convertDoublesToBytes(this.sampleBuffer, audioOutput.getFormat().getSampleSizeInBits()),
+                0, this.sampleBuffer.length * 2);
+
+        audioOutput.drain();
+        audioOutput.close();
+
     }
 
-    public void setSample(int i, double value) {
-        this.sampleBuffer[i] = value;
+    public void playTo(SourceDataLine audioOutput, boolean continuous) {
+
+        if(!continuous) audioOutput.start();
+
+        audioOutput.write(convertDoublesToBytes(this.sampleBuffer, audioOutput.getFormat().getSampleSizeInBits()),
+                0, this.sampleBuffer.length * 2);
+
+        if(!continuous) audioOutput.drain();
+        if(!continuous) audioOutput.close();
+
     }
 
     public double getSample(int i) {
         return sampleBuffer[i];
     }
 
-    public int getFrameSize(){
-        return this.sampleBuffer.length ;
+    public void setSample(int i, double value) {
+        sampleBuffer[i] = value;
     }
 
-    Complex[] computeFFT(){
-        int n = this.getFrameSize() ;
-        double[] data = this.sampleBuffer ;
-        Complex[] fft = new Complex[this.getFrameSize()] ;
+    public double getdBlevel() {
+        return dBlevel;
+    }
 
-        for(int i = 0 ; i < n ; i++){
-            double real = 0, imaginary = 0 ;
+    public int getFrameSize() {
+        return sampleBuffer.length;
+    }
 
-            for(int j = 0 ; j < n ; j++){
-                real += data[j]*cos(-2*i*PI*j/n) ;
-                imaginary += data[j]*sin(-2*i*PI*j/n) ;
+    public void setFrameSize(int FrameSize) {
+        this.sampleBuffer = new double[FrameSize];
+    }
+
+    public double[] getSampleBuffer() {
+        return sampleBuffer;
+    }
+
+
+    public void playTestSin(SourceDataLine sourceDataLine) {
+        if(sourceDataLine.getFormat().getSampleSizeInBits() == 16) {
+
+            int bufferSize = this.getFrameSize();
+            double[] buffer = new double[bufferSize];
+
+
+            for (int i = 0; i < bufferSize/2; i++) {
+                double angle = 2.0 * Math.PI * 1000 * i / sourceDataLine.getFormat().getSampleRate();
+                double sampleValue = Math.sin(angle);
+
+                buffer[i] = sampleValue;
             }
 
-            fft[i] = new Complex(real, imaginary) ;
+            this.sampleBuffer = buffer;
+
+            this.playTo(sourceDataLine);
+            sourceDataLine.drain();
+            sourceDataLine.close();
+
+        } else {
+            throw new RuntimeException("Not a 16 bits audio");
+        }
+    }
+
+    public void playTestSin(SourceDataLine sourceDataLine, boolean continuous) {
+        if(sourceDataLine.getFormat().getSampleSizeInBits() == 16) {
+
+            int bufferSize = this.getFrameSize();
+            double[] buffer = new double[bufferSize];
+
+
+            for (int i = 0; i < bufferSize/2; i++) {
+                double angle = 2.0 * Math.PI * 1000 * i / sourceDataLine.getFormat().getSampleRate();
+                double sampleValue = Math.sin(angle);
+
+                buffer[i] = sampleValue;
+            }
+
+            this.sampleBuffer = buffer;
+
+            this.playTo(sourceDataLine, continuous);
+
+        } else {
+            throw new RuntimeException("Not a 16 bits audio");
+        }
+    }
+
+
+    public static void main(String[] args) throws LineUnavailableException {
+
+        AudioFormat audioFormat = new AudioFormat(8000.0f, 16, 1, true,
+                true);
+
+
+        AudioSignal audioSignal = new AudioSignal(32000);
+        AudioSignal audioSignal2 = new AudioSignal(audioSignal);
+
+
+        SourceDataLine sourceDataLine;
+        TargetDataLine targetDataLine;
+
+
+        try {
+            sourceDataLine = AudioSystem.getSourceDataLine(audioFormat);
+            targetDataLine = AudioSystem.getTargetDataLine(audioFormat);
+        } catch (LineUnavailableException e) {
+            throw new RuntimeException(e);
         }
 
-        return fft ;
+
+        System.out.println(sourceDataLine.getLineInfo());
+        System.out.println(targetDataLine.getLineInfo());
+
+
+        try {
+            targetDataLine.open(audioFormat);
+            targetDataLine.start();
+        } catch (LineUnavailableException e) {
+            throw new RuntimeException(e);
+        }
+
+
+        System.out.println("Start");
+        audioSignal.recordFrom(targetDataLine); System.out.println("End");
+
+
+        System.out.println("Start on sourceDataLine"); sourceDataLine.open(audioFormat);
+        sourceDataLine.start();
+        audioSignal.playTo(sourceDataLine); System.out.println("End on sourceDataLine");
+
+
+        audioSignal2.setFrom(audioSignal);
+
+
+        System.out.println("Start on sourceDataLine of audioSignal2"); sourceDataLine.open(audioFormat);
+        sourceDataLine.start();
+        audioSignal2.playTo(sourceDataLine); System.out.println("End on sourceDataLine of audioSignal2 !");
+
+
+        System.out.println("Start test"); sourceDataLine.open(audioFormat);
+        sourceDataLine.start();
+        audioSignal.playTestSin(sourceDataLine); System.out.println("End test");
+
+    }
+
+    public Complex[] computeFFT() {
+        int fftSize = 1;
+        while (fftSize < sampleBuffer.length) {
+            fftSize *= 2;
+        }
+
+        double[] fftBuffer = new double[fftSize];
+        System.arraycopy(sampleBuffer, 0, fftBuffer, 0, sampleBuffer.length);
+
+
+        return FFT.fft(Complex.fromArray(fftBuffer));
     }
 }

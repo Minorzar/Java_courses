@@ -1,29 +1,34 @@
 package math;
 
-import static java.lang.Math.sqrt;
+public record Complex(double real, double imag) {
 
-public class Complex {
-
-    double real ;
-
-    double imaginary ;
-
-    public Complex(double real, double imaginary){
-        this.imaginary = imaginary ;
-        this.real = real ;
+    public static Complex[] fromArray(double[] array) {
+        Complex[] result = new Complex[array.length];
+        for (int i = 0; i < array.length; i++) {
+            result[i] = new Complex(array[i], 0);
+        }
+        return result;
     }
 
-    public Complex sum(Complex c1, Complex c2){
-        return new Complex(c1.real + c2.real, c1.imaginary + c2.imaginary) ;
+    public Complex plus(Complex b) {
+        return new Complex(this.real + b.real, this.imag + b.imag);
     }
 
-    public Complex product(Complex c1, Complex c2){
-        return new Complex(c1.real*c2.real-c1.imaginary*c2.imaginary,
-                           c1.real*c2.imaginary + c1.imaginary*c2.real) ;
+    public Complex minus(Complex b) {
+        return new Complex(this.real - b.real, this.imag - b.imag);
     }
 
-    public double norme(Complex c){
-        return sqrt(c.real*c.real+c.imaginary*c.imaginary) ;
+    public Complex times(Complex b) {
+        return new Complex(this.real * b.real - this.imag * b.imag, this.real * b.imag + this.imag * b.real);
     }
+
+    public Complex conjugate() {
+        return new Complex(this.real, -this.imag);
+    }
+
+    public double abs() {
+        return Math.sqrt(this.real * this.real + this.imag * this.imag);
+    }
+
 
 }
